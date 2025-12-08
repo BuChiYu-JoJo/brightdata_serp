@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode, urlparse, parse_qs, quote
 
 import requests
 
@@ -48,8 +48,6 @@ class EngineConfig:
         Note: If base_url contains duplicate parameter names, only the first value is preserved.
         URL fragments (parts after #) are not preserved as they are not used in SERP APIs.
         """
-        from urllib.parse import quote
-        
         params: Dict[str, Any] = {}
         
         # Parse the base URL to extract any existing query parameters
@@ -68,12 +66,14 @@ class EngineConfig:
                 # If query is a dict, use the required_param value for path
                 query_value = query.get(self.required_param, "")
                 if query_value:
-                    path_suffix = quote(str(query_value), safe='')
+                    # URL encode but preserve common safe characters for readability
+                    path_suffix = quote(str(query_value), safe='-_.~')
                 # Add other dict items as regular params
                 params.update({k: v for k, v in query.items() if k != self.required_param})
             else:
                 # Simple query string goes in path
-                path_suffix = quote(str(query), safe='')
+                # URL encode but preserve common safe characters for readability
+                path_suffix = quote(str(query), safe='-_.~')
         else:
             # Standard parameter handling
             if isinstance(query, dict):
@@ -99,7 +99,8 @@ class EngineConfig:
         
         # Add path suffix if needed (e.g., for maps: /search/hotels/)
         if path_suffix:
-            clean_base = clean_base.rstrip('/') + '/' + path_suffix + '/'
+            # Ensure no double slashes by removing trailing slash from base
+            clean_base = clean_base.rstrip('/') + '/' + path_suffix.lstrip('/') + '/'
         
         return f"{clean_base}?{encoded}" if encoded else clean_base
 
