@@ -32,6 +32,8 @@ class EngineConfig:
     base_url: str
     required_param: str = "q"
     extra_params: Dict[str, Any] = None
+    query_in_path: bool = False  # If True, append query to path instead of as parameter
+    include_brd_json: bool = True  # If False, don't add brd_json parameter
 
     def build_url(self, query: Any, brd_json: Optional[int] = 1) -> str:
         """
@@ -41,10 +43,13 @@ class EngineConfig:
         - No trailing ampersands (&) in the URL
         - Proper handling of base URLs with or without existing query parameters
         - Correct parameter encoding and concatenation
+        - Support for query-in-path format (e.g., maps)
         
         Note: If base_url contains duplicate parameter names, only the first value is preserved.
         URL fragments (parts after #) are not preserved as they are not used in SERP APIs.
         """
+        from urllib.parse import quote
+        
         params: Dict[str, Any] = {}
         
         # Parse the base URL to extract any existing query parameters
@@ -56,11 +61,25 @@ class EngineConfig:
             if values:
                 params[key] = values[0]
 
-        # Add the main query parameter (will overwrite existing param with same name)
-        if isinstance(query, dict):
-            params.update(query)
+        # Handle query_in_path format (for engines like maps)
+        path_suffix = ""
+        if self.query_in_path:
+            if isinstance(query, dict):
+                # If query is a dict, use the required_param value for path
+                query_value = query.get(self.required_param, "")
+                if query_value:
+                    path_suffix = quote(str(query_value), safe='')
+                # Add other dict items as regular params
+                params.update({k: v for k, v in query.items() if k != self.required_param})
+            else:
+                # Simple query string goes in path
+                path_suffix = quote(str(query), safe='')
         else:
-            params[self.required_param] = query
+            # Standard parameter handling
+            if isinstance(query, dict):
+                params.update(query)
+            else:
+                params[self.required_param] = query
 
         # Add extra parameters only if they don't already exist (setdefault preserves existing)
         if self.extra_params:
@@ -68,7 +87,8 @@ class EngineConfig:
                 params.setdefault(key, value)
 
         # Ensure Bright Data returns JSON by default, unless the caller opts out
-        if brd_json is not None:
+        # Only add if engine config allows it
+        if brd_json is not None and self.include_brd_json:
             params["brd_json"] = brd_json
 
         # Encode parameters, filtering out None values
@@ -76,6 +96,10 @@ class EngineConfig:
         
         # Reconstruct URL with clean base (without query string, fragment, or trailing ?)
         clean_base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        
+        # Add path suffix if needed (e.g., for maps: /search/hotels/)
+        if path_suffix:
+            clean_base = clean_base.rstrip('/') + '/' + path_suffix + '/'
         
         return f"{clean_base}?{encoded}" if encoded else clean_base
 
@@ -87,48 +111,40 @@ class BrightDataTester:
 
     SUPPORTED_ENGINES: Dict[str, EngineConfig] = {
         "search": EngineConfig(name="search", base_url="https://www.google.com/search"),
-        # Google Maps place/POI lookups. Accepts free-text queries such as "coffee near me".
+        # Google Maps place/POI lookups. URL format: /maps/search/{query}/
         "maps": EngineConfig(
             name="maps",
-            base_url="https://www.google.com/maps",
+            base_url="https://www.google.com/maps/search",
             required_param="q",
-            extra_params={"hl": "en", "gl": "us"},
+            query_in_path=True,
         ),
-        # Google Trends keyword popularity. Bright Data proxies the Trends web UI so q=keyword
-        # with optional geo/time window produces the same widget data JSON.
+        # Google Trends keyword popularity. Minimal parameters for trend data.
         "trends": EngineConfig(
             name="trends",
             base_url="https://trends.google.com/trends/explore",
-            extra_params={
-                "geo": "us",
-                "hl": "en",
-                "brd_trends": "timeseries,geo_map",
-            },
         ),
         # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
         "reviews": EngineConfig(
             name="reviews",
             base_url="https://www.google.com/search",
-            extra_params={"tbm": "lcl", "hl": "en", "gl": "us"},
+            extra_params={"tbm": "lcl"},
         ),
-        # Google Lens reverse image search via URL input.
+        # Google Lens reverse image search via URL input. Minimal parameters only.
         "lens": EngineConfig(
             name="lens",
             base_url="https://lens.google.com/uploadbyurl",
             required_param="url",
-            extra_params={"hl": "en"},
+            include_brd_json=False,
         ),
         # Google Hotels vertical. q takes the destination/city or hotel name.
         "hotels": EngineConfig(
             name="hotels",
             base_url="https://www.google.com/travel/hotels",
-            extra_params={"hl": "en", "gl": "us"},
         ),
         # Google Flights vertical. q expects origin/destination/free text like "SFO to JFK".
         "flights": EngineConfig(
             name="flights",
             base_url="https://www.google.com/travel/flights",
-            extra_params={"hl": "en", "gl": "us"},
         ),
     }
 
