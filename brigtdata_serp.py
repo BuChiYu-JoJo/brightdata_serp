@@ -60,8 +60,44 @@ class BrightDataTester:
 
     SUPPORTED_ENGINES: Dict[str, EngineConfig] = {
         "search": EngineConfig(name="search", base_url="https://www.google.com/search"),
-        "maps": EngineConfig(name="maps", base_url="https://www.google.com/maps"),
-        "trends": EngineConfig(name="trends", base_url="https://www.google.com/trends"),
+        # Google Maps place/POI lookups. Accepts free-text queries such as "coffee near me".
+        "maps": EngineConfig(
+            name="maps",
+            base_url="https://www.google.com/maps/search/",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
+        # Google Trends keyword popularity. Bright Data proxies the Trends web UI so q=keyword
+        # with optional geo/time window produces the same widget data JSON.
+        "trends": EngineConfig(
+            name="trends",
+            base_url="https://trends.google.com/trends/explore",
+            extra_params={"geo": "US", "hl": "en"},
+        ),
+        # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
+        "reviews": EngineConfig(
+            name="reviews",
+            base_url="https://www.google.com/search",
+            extra_params={"tbm": "lcl", "hl": "en", "gl": "us"},
+        ),
+        # Google Lens reverse image search via URL input.
+        "lens": EngineConfig(
+            name="lens",
+            base_url="https://lens.google.com/uploadbyurl",
+            required_param="url",
+            extra_params={"hl": "en"},
+        ),
+        # Google Hotels vertical. q takes the destination/city or hotel name.
+        "hotels": EngineConfig(
+            name="hotels",
+            base_url="https://www.google.com/travel/hotels",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
+        # Google Flights vertical. q expects origin/destination/free text like "SFO to JFK".
+        "flights": EngineConfig(
+            name="flights",
+            base_url="https://www.google.com/travel/flights",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
     }
 
     KEYWORD_POOL = [
