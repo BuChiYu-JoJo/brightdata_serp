@@ -41,6 +41,9 @@ class EngineConfig:
         - No trailing ampersands (&) in the URL
         - Proper handling of base URLs with or without existing query parameters
         - Correct parameter encoding and concatenation
+        
+        Note: If base_url contains duplicate parameter names, only the first value is preserved.
+        URL fragments (parts after #) are not preserved as they are not used in SERP APIs.
         """
         params: Dict[str, Any] = {}
         
@@ -48,18 +51,18 @@ class EngineConfig:
         parsed = urlparse(self.base_url)
         existing_params = parse_qs(parsed.query)
         
-        # Flatten existing params (parse_qs returns lists)
+        # Flatten existing params (parse_qs returns lists; only first value is preserved)
         for key, values in existing_params.items():
             if values:
                 params[key] = values[0]
 
-        # Add the main query parameter
+        # Add the main query parameter (will overwrite existing param with same name)
         if isinstance(query, dict):
             params.update(query)
         else:
             params[self.required_param] = query
 
-        # Add extra parameters (without overwriting existing ones)
+        # Add extra parameters only if they don't already exist (setdefault preserves existing)
         if self.extra_params:
             for key, value in self.extra_params.items():
                 params.setdefault(key, value)
@@ -71,7 +74,7 @@ class EngineConfig:
         # Encode parameters, filtering out None values
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
         
-        # Reconstruct URL with clean base (no query string or trailing ?) and new parameters
+        # Reconstruct URL with clean base (without query string, fragment, or trailing ?)
         clean_base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
         
         return f"{clean_base}?{encoded}" if encoded else clean_base
