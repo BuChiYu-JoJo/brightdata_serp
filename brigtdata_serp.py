@@ -148,6 +148,22 @@ class BrightDataTester:
             name="flights",
             base_url="https://www.google.com/travel/flights",
         ),
+        # Bing search engine. Uses q parameter for queries.
+        "bing": EngineConfig(
+            name="bing",
+            base_url="https://www.bing.com/search",
+        ),
+        # Yandex search engine. Uses text parameter for queries.
+        "yandex": EngineConfig(
+            name="yandex",
+            base_url="https://www.yandex.com/search/",
+            required_param="text",
+        ),
+        # DuckDuckGo search engine. Uses q parameter for queries.
+        "duckduckgo": EngineConfig(
+            name="duckduckgo",
+            base_url="https://duckduckgo.com/",
+        ),
     }
 
     ENGINE_SAMPLE_QUERIES: Dict[str, List[Any]] = {

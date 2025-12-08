@@ -1,10 +1,10 @@
 # Bright Data SERP 性能测试工具
 
-一个用于测试 Bright Data SERP API 性能的 Python 工具，支持多种 Google 搜索引擎（Search、Maps、Trends、Reviews、Lens、Hotels、Flights）的并发测试和性能分析。
+一个用于测试 Bright Data SERP API 性能的 Python 工具，支持多种搜索引擎（Google、Bing、Yandex、DuckDuckGo 等）的并发测试和性能分析。
 
 ## 功能特性
 
-- ✅ 支持 7 种 Google 搜索引擎的测试
+- ✅ 支持 10 种搜索引擎的测试（7种Google引擎 + 3种其他搜索引擎）
 - ✅ 并发请求测试，可自定义并发数
 - ✅ 详细的性能统计（成功率、响应时间、延迟百分位数）
 - ✅ 支持 JSON 和 HTML 两种响应格式
@@ -23,6 +23,9 @@
 | `lens` | Google 图片搜索（反向图片搜索） | 不使用 `brd_json` |
 | `hotels` | Google 酒店搜索 | 支持入住/退房日期 |
 | `flights` | Google 航班搜索 | - |
+| `bing` | Bing 搜索 | - |
+| `yandex` | Yandex 搜索 | 使用 `text` 参数 |
+| `duckduckgo` | DuckDuckGo 搜索 | - |
 
 ## 安装依赖
 
@@ -152,6 +155,56 @@ Flights 引擎支持航线查询：
 {"q": "SFO to JFK", "src": "searchbox"}
 ```
 
+### Bing (`bing`)
+
+Bing 搜索引擎使用标准的 `q` 参数：
+```bash
+# 使用 KEYWORD_POOL 中的随机关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e bing -n 10 -c 5
+
+# 指定查询关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e bing -q "artificial intelligence" -n 10
+```
+
+生成的 URL 示例：
+```
+https://www.bing.com/search?q=pizza&brd_json=1
+```
+
+### Yandex (`yandex`)
+
+Yandex 搜索引擎使用 `text` 参数（而非 `q`）：
+```bash
+# 使用 KEYWORD_POOL 中的随机关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e yandex -n 10 -c 5
+
+# 指定查询关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e yandex -q "cryptocurrency" -n 10
+```
+
+生成的 URL 示例：
+```
+https://www.yandex.com/search/?text=pizza&brd_json=1
+```
+
+### DuckDuckGo (`duckduckgo`)
+
+DuckDuckGo 搜索引擎使用标准的 `q` 参数：
+```bash
+# 使用 KEYWORD_POOL 中的随机关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e duckduckgo -n 10 -c 5
+
+# 指定查询关键词
+python brigtdata_serp.py -t YOUR_API_TOKEN -z YOUR_ZONE -e duckduckgo -q "privacy search" -n 10
+```
+
+生成的 URL 示例：
+```
+https://duckduckgo.com/?q=pizza&brd_json=1
+```
+
+**注意**：Bing、Yandex 和 DuckDuckGo 引擎默认使用内置的 KEYWORD_POOL 随机选择查询关键词，包含 60+ 个常见搜索词。
+
 ## 输出结果
 
 ### 控制台输出
@@ -209,7 +262,8 @@ trends              10      5       1.987        10    100%        1.678    1.60
 - **Lens**: 多个图片 URL（来自 Imgur, Picsum, Unsplash 等）
 - **Hotels**: 带入住日期的酒店查询
 - **Flights**: 航线查询（SFO to JFK, LAX to NRT 等）
-- **通用关键词池**: 200+ 个常见搜索关键词
+- **Bing/Yandex/DuckDuckGo**: 使用通用关键词池
+- **通用关键词池 (KEYWORD_POOL)**: 60+ 个常见搜索关键词（pizza, coffee, weather, news, hotel, flight 等）
 
 ## 性能指标说明
 
@@ -234,6 +288,9 @@ python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e search -n 10 -c 5
 ```bash
 # 对比不同引擎的性能
 python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e search maps trends -n 20 -c 5 --save-details
+
+# 对比多个搜索引擎（Google、Bing、Yandex、DuckDuckGo）
+python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e search bing yandex duckduckgo -n 20 -c 5
 ```
 
 ### 3. 压力测试
@@ -248,12 +305,15 @@ python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e search -n 50 -c 10 --form
 ```bash
 # 测试特定查询的稳定性
 python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e search trends -q "cryptocurrency" -n 30 -c 5
+
+# 测试多个搜索引擎使用相同关键词
+python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE -e bing yandex duckduckgo -q "artificial intelligence" -n 20 -c 5
 ```
 
 ### 5. 完整测试报告
 
 ```bash
-# 测试所有引擎并保存详细报告
+# 测试所有引擎并保存详细报告（包括10个引擎）
 python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE --all-engines -n 20 -c 5 --save-details -o full_report.csv
 ```
 
