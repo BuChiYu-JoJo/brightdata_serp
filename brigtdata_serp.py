@@ -33,7 +33,7 @@ class EngineConfig:
     required_param: str = "q"
     extra_params: Dict[str, Any] = None
 
-    def build_url(self, query: Any) -> str:
+    def build_url(self, query: Any, brd_json: Optional[int] = 1) -> str:
         params: Dict[str, Any] = {}
 
         if isinstance(query, dict):
@@ -44,8 +44,9 @@ class EngineConfig:
         if self.extra_params:
             params.update(self.extra_params)
 
-        # Ensure Bright Data returns JSON by default, per request URL contract
-        params.setdefault("brd_json", 1)
+        # Ensure Bright Data returns JSON by default, unless the caller opts out
+        if brd_json is not None:
+            params["brd_json"] = brd_json
 
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
         connector = "?" if "?" not in self.base_url else "&"
@@ -86,18 +87,26 @@ class BrightDataTester:
             "books best seller", "novels", "ebooks"
     ]
 
-    def __init__(self, api_token: str, zone: str, response_format: str = "raw", save_details: bool = False):
+    def __init__(
+        self,
+        api_token: str,
+        zone: str,
+        response_format: str = "raw",
+        save_details: bool = False,
+        brd_json: Optional[int] = 1,
+    ):
         self.api_token = api_token
         self.zone = zone
         self.response_format = response_format
         self.save_details = save_details
+        self.brd_json = brd_json
 
     def _build_payload(self, engine: str, query: Any) -> Dict[str, Any]:
         if engine not in self.SUPPORTED_ENGINES:
             raise ValueError(f"不支持的引擎: {engine}")
 
         config = self.SUPPORTED_ENGINES[engine]
-        url = config.build_url(query)
+        url = config.build_url(query, brd_json=self.brd_json)
 
         payload = {
             "zone": self.zone,
@@ -384,6 +393,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-details", action="store_true", help="保存每个请求的详细 CSV 记录")
     parser.add_argument("-o", "--output", default="brightdata_summary_statistics.csv", help="汇总统计输出文件名")
     parser.add_argument("--list-engines", action="store_true", help="列出所有支持的引擎")
+    parser.add_argument(
+        "--brd-json",
+        type=int,
+        choices=[0, 1],
+        default=1,
+        help="是否在 URL 中附加 brd_json 参数 (默认 1；设置为 0 时不追加)",
+    )
 
     return parser.parse_args()
 
@@ -408,6 +424,7 @@ def main() -> None:
         zone=args.zone,
         response_format=args.format,
         save_details=args.save_details,
+        brd_json=args.brd_json if args.brd_json != 0 else None,
     )
 
     _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
