@@ -42,7 +42,8 @@ class EngineConfig:
             params[self.required_param] = query
 
         if self.extra_params:
-            params.update(self.extra_params)
+            for key, value in self.extra_params.items():
+                params.setdefault(key, value)
 
         # Ensure Bright Data returns JSON by default, unless the caller opts out
         if brd_json is not None:
@@ -100,14 +101,47 @@ class BrightDataTester:
         ),
     }
 
-    ENGINE_DEFAULT_QUERIES: Dict[str, Any] = {
-        "search": None,  # falls back to KEYWORD_POOL
-        "maps": "coffee near me",
-        "trends": "ai news",
-        "reviews": "best sushi in nyc",
-        "lens": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
-        "hotels": "paris hotel",
-        "flights": "SFO to JFK",
+    ENGINE_SAMPLE_QUERIES: Dict[str, List[Any]] = {
+        "maps": [
+            "coffee near me",
+            "pharmacy shanghai",
+            "atm beijing",
+            "gas station los angeles",
+            "hotel tokyo",
+            "restaurant paris",
+        ],
+        "trends": [
+            {"q": "ai news", "geo": "US", "date": "now 7-d"},
+            {"q": "bitcoin", "geo": "GB", "date": "today 12-m"},
+            {"q": "nba", "geo": "US", "date": "now 1-d"},
+            {"q": "旅游", "geo": "CN", "date": "now 1-d"},
+        ],
+        "reviews": [
+            "best sushi in nyc",
+            "coffee shop san francisco",
+            "bakery london",
+            "dentist seattle",
+            "hotel shenzhen",
+        ],
+        "lens": [
+            "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/9/99/Black_cat_on_sea_defense.JPG",
+            "https://upload.wikimedia.org/wikipedia/commons/5/56/Totem_Pole%2C_Navajo_Nation%2C_Arizona%2C_USA.jpg",
+        ],
+        "hotels": [
+            "paris hotel",
+            "tokyo resort",
+            "new york boutique hotel",
+            "sydney harbour hotel",
+            {"q": "berlin hotel", "checkin": "2025-10-01", "checkout": "2025-10-05", "adults": 2},
+        ],
+        "flights": [
+            "SFO to JFK",
+            "LAX to NRT",
+            "PEK to PVG",
+            "CDG to LHR",
+            {"q": "BOS to MIA", "src": "searchbox"},
+        ],
     }
 
     KEYWORD_POOL = [
@@ -269,9 +303,11 @@ class BrightDataTester:
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
             return explicit_query
-        default_query = self.ENGINE_DEFAULT_QUERIES.get(engine)
-        if default_query:
-            return default_query
+
+        engine_queries = self.ENGINE_SAMPLE_QUERIES.get(engine)
+        if engine_queries:
+            return random.choice(engine_queries)
+
         return random.choice(self.KEYWORD_POOL)
 
     def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:

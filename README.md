@@ -8,12 +8,12 @@ Bright Data SERP 性能测试脚本会默认在生成的 URL 中附加 `brd_json
 | 引擎 | 基准 URL | 关键参数 | 默认/示例参数 | 备注 |
 | --- | --- | --- | --- | --- |
 | search | `https://www.google.com/search` | `q` | 默认使用 `KEYWORD_POOL` 中的词，例如 `pizza` | 普通搜索。可额外追加 `hl`/`gl`/`uule` 等地区语言参数。 |
-| maps | `https://www.google.com/maps/search/` | `q` | 默认 `coffee near me` | 地图/POI 搜索，脚本默认附带 `hl=en&gl=us`。 |
-| trends | `https://trends.google.com/trends/explore` | `q` | 默认 `ai news` | 趋势检索，脚本默认附带 `geo=US&hl=en`，可按需改地理范围或时间窗口。 |
-| reviews | `https://www.google.com/search` | `q`，`tbm=lcl` | 默认 `best sushi in nyc` | 本地点评/门店列表，垂直参数 `tbm=lcl` 由脚本自动追加。指定门店 ID 时可使用 `lrd` 参数。 |
-| lens | `https://lens.google.com/uploadbyurl` | `url` | 默认 `https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg` | Lens 以图搜图。必须提供图片 URL；脚本会追加 `hl=en`。 |
-| hotels | `https://www.google.com/travel/hotels` | `q` | 默认 `paris hotel` | 酒店搜索，可在 `q` 中写城市或酒店名，脚本默认 `hl=en&gl=us`。 |
-| flights | `https://www.google.com/travel/flights` | `q` | 默认 `SFO to JFK` | 机票航班查询，`q` 可写“出发地 to 目的地”，同样默认 `hl=en&gl=us`。 |
+| maps | `https://www.google.com/maps/search/` | `q` | 随机使用 `coffee near me`、`pharmacy shanghai`、`gas station los angeles` 等 | 地图/POI 搜索，脚本默认附带 `hl=en&gl=us`。 |
+| trends | `https://trends.google.com/trends/explore` | `q` | 随机使用 `ai news`、`bitcoin`、`nba`、`旅游`，并带上 `geo`/`date` 示例 | 趋势检索，脚本默认附带 `geo=US&hl=en`，可按需改地理范围或时间窗口。 |
+| reviews | `https://www.google.com/search` | `q`，`tbm=lcl` | 随机使用 `best sushi in nyc`、`coffee shop san francisco`、`hotel shenzhen` 等 | 本地点评/门店列表，垂直参数 `tbm=lcl` 由脚本自动追加。指定门店 ID 时可使用 `lrd` 参数。 |
+| lens | `https://lens.google.com/uploadbyurl` | `url` | 随机使用三张公开图片的 URL | Lens 以图搜图。必须提供图片 URL；脚本会追加 `hl=en`。 |
+| hotels | `https://www.google.com/travel/hotels` | `q` | 随机使用城市/酒店名，含带日期的示例请求 | 酒店搜索，可在 `q` 中写城市或酒店名，脚本默认 `hl=en&gl=us`。 |
+| flights | `https://www.google.com/travel/flights` | `q` | 随机使用 `SFO to JFK`、`LAX to NRT`、`PEK to PVG` 等航线 | 机票航班查询，`q` 可写“出发地 to 目的地”，同样默认 `hl=en&gl=us`。 |
 
 运行示例（开启所有预置引擎并保存汇总）：
 
