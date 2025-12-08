@@ -129,10 +129,10 @@ class BrightDataTester:
             "https://upload.wikimedia.org/wikipedia/commons/5/56/Totem_Pole%2C_Navajo_Nation%2C_Arizona%2C_USA.jpg",
         ],
         "hotels": [
-            "paris hotel",
-            "tokyo resort",
-            "new york boutique hotel",
-            "sydney harbour hotel",
+            {"q": "paris hotel"},
+            {"q": "tokyo resort"},
+            {"q": "new york boutique hotel"},
+            {"q": "sydney harbour hotel"},
             {"q": "berlin hotel", "checkin": "2025-10-01", "checkout": "2025-10-05", "adults": 2},
         ],
         "flights": [

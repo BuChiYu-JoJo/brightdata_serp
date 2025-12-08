@@ -12,7 +12,7 @@ Bright Data SERP 性能测试脚本会默认在生成的 URL 中附加 `brd_json
 | trends | `https://trends.google.com/trends/explore` | `q` | 随机使用 `ai news`、`bitcoin`、`nba`、`旅游`，并带上 `geo`/`date` 示例 | 趋势检索，脚本默认附带 `geo=US&hl=en`，可按需改地理范围或时间窗口。 |
 | reviews | `https://www.google.com/search` | `q`，`tbm=lcl` | 随机使用 `best sushi in nyc`、`coffee shop san francisco`、`hotel shenzhen` 等 | 本地点评/门店列表，垂直参数 `tbm=lcl` 由脚本自动追加。指定门店 ID 时可使用 `lrd` 参数。 |
 | lens | `https://lens.google.com/uploadbyurl` | `url` | 随机使用三张公开图片的 URL | Lens 以图搜图。必须提供图片 URL；脚本会追加 `hl=en`。 |
-| hotels | `https://www.google.com/travel/hotels` | `q` | 随机使用城市/酒店名，含带日期的示例请求 | 酒店搜索，可在 `q` 中写城市或酒店名，脚本默认 `hl=en&gl=us`。 |
+| hotels | `https://www.google.com/travel/hotels` | `q` | 随机使用结构化 `q` 词（如 `{q: "paris hotel"}`），含带日期的示例请求 | 酒店搜索，可在 `q` 中写城市或酒店名，脚本默认 `hl=en&gl=us`。 |
 | flights | `https://www.google.com/travel/flights` | `q` | 随机使用 `q=SFO to JFK`、`q=LAX to NRT` 等并带上 `src=searchbox` | 机票航班查询，`q` 可写“出发地 to 目的地”，同样默认 `hl=en&gl=us`；`src=searchbox` 模拟网页搜索栏输入。 |
 
 运行示例（开启所有预置引擎并保存汇总）：
