@@ -263,7 +263,7 @@ trends              10      5       1.987        10    100%        1.678    1.60
 - **Hotels**: 带入住日期的酒店查询
 - **Flights**: 航线查询（SFO to JFK, LAX to NRT 等）
 - **Bing/Yandex/DuckDuckGo**: 使用通用关键词池
-- **通用关键词池 (KEYWORD_POOL)**: 60+ 个常见搜索关键词（pizza, coffee, weather, news, hotel, flight 等）
+- **通用关键词池 (KEYWORD_POOL)**: 69 个常见搜索关键词（pizza, coffee, weather, news, hotel, flight 等）
 
 ## 性能指标说明
 
