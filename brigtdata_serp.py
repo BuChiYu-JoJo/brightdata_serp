@@ -33,7 +33,7 @@ class EngineConfig:
     required_param: str = "q"
     extra_params: Dict[str, Any] = None
 
-    def build_url(self, query: Any) -> str:
+    def build_url(self, query: Any, brd_json: Optional[int] = 1) -> str:
         params: Dict[str, Any] = {}
 
         if isinstance(query, dict):
@@ -42,7 +42,12 @@ class EngineConfig:
             params[self.required_param] = query
 
         if self.extra_params:
-            params.update(self.extra_params)
+            for key, value in self.extra_params.items():
+                params.setdefault(key, value)
+
+        # Ensure Bright Data returns JSON by default, unless the caller opts out
+        if brd_json is not None:
+            params["brd_json"] = brd_json
 
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
         connector = "?" if "?" not in self.base_url else "&"
@@ -56,8 +61,87 @@ class BrightDataTester:
 
     SUPPORTED_ENGINES: Dict[str, EngineConfig] = {
         "search": EngineConfig(name="search", base_url="https://www.google.com/search"),
-        "maps": EngineConfig(name="maps", base_url="https://www.google.com/maps"),
-        "trends": EngineConfig(name="trends", base_url="https://www.google.com/trends"),
+        # Google Maps place/POI lookups. Accepts free-text queries such as "coffee near me".
+        "maps": EngineConfig(
+            name="maps",
+            base_url="https://www.google.com/maps/search/",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
+        # Google Trends keyword popularity. Bright Data proxies the Trends web UI so q=keyword
+        # with optional geo/time window produces the same widget data JSON.
+        "trends": EngineConfig(
+            name="trends",
+            base_url="https://trends.google.com/trends/explore",
+            extra_params={"geo": "US", "hl": "en"},
+        ),
+        # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
+        "reviews": EngineConfig(
+            name="reviews",
+            base_url="https://www.google.com/search",
+            extra_params={"tbm": "lcl", "hl": "en", "gl": "us"},
+        ),
+        # Google Lens reverse image search via URL input.
+        "lens": EngineConfig(
+            name="lens",
+            base_url="https://lens.google.com/uploadbyurl",
+            required_param="url",
+            extra_params={"hl": "en"},
+        ),
+        # Google Hotels vertical. q takes the destination/city or hotel name.
+        "hotels": EngineConfig(
+            name="hotels",
+            base_url="https://www.google.com/travel/hotels",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
+        # Google Flights vertical. q expects origin/destination/free text like "SFO to JFK".
+        "flights": EngineConfig(
+            name="flights",
+            base_url="https://www.google.com/travel/flights",
+            extra_params={"hl": "en", "gl": "us"},
+        ),
+    }
+
+    ENGINE_SAMPLE_QUERIES: Dict[str, List[Any]] = {
+        "maps": [
+            "coffee near me",
+            "pharmacy shanghai",
+            "atm beijing",
+            "gas station los angeles",
+            "hotel tokyo",
+            "restaurant paris",
+        ],
+        "trends": [
+            {"q": "ai news", "geo": "US", "date": "now 7-d"},
+            {"q": "bitcoin", "geo": "GB", "date": "today 12-m"},
+            {"q": "nba", "geo": "US", "date": "now 1-d"},
+            {"q": "旅游", "geo": "CN", "date": "now 1-d"},
+        ],
+        "reviews": [
+            "best sushi in nyc",
+            "coffee shop san francisco",
+            "bakery london",
+            "dentist seattle",
+            "hotel shenzhen",
+        ],
+        "lens": [
+            "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/9/99/Black_cat_on_sea_defense.JPG",
+            "https://upload.wikimedia.org/wikipedia/commons/5/56/Totem_Pole%2C_Navajo_Nation%2C_Arizona%2C_USA.jpg",
+        ],
+        "hotels": [
+            {"q": "paris hotel"},
+            {"q": "tokyo resort"},
+            {"q": "new york boutique hotel"},
+            {"q": "sydney harbour hotel"},
+            {"q": "berlin hotel", "checkin": "2025-10-01", "checkout": "2025-10-05", "adults": 2},
+        ],
+        "flights": [
+            {"q": "SFO to JFK", "src": "searchbox"},
+            {"q": "LAX to NRT", "src": "searchbox"},
+            {"q": "PEK to PVG", "src": "searchbox"},
+            {"q": "CDG to LHR", "src": "searchbox"},
+            {"q": "BOS to MIA", "src": "searchbox"},
+        ],
     }
 
     KEYWORD_POOL = [
@@ -83,18 +167,26 @@ class BrightDataTester:
             "books best seller", "novels", "ebooks"
     ]
 
-    def __init__(self, api_token: str, zone: str, response_format: str = "raw", save_details: bool = False):
+    def __init__(
+        self,
+        api_token: str,
+        zone: str,
+        response_format: str = "raw",
+        save_details: bool = False,
+        brd_json: Optional[int] = 1,
+    ):
         self.api_token = api_token
         self.zone = zone
         self.response_format = response_format
         self.save_details = save_details
+        self.brd_json = brd_json
 
     def _build_payload(self, engine: str, query: Any) -> Dict[str, Any]:
         if engine not in self.SUPPORTED_ENGINES:
             raise ValueError(f"不支持的引擎: {engine}")
 
         config = self.SUPPORTED_ENGINES[engine]
-        url = config.build_url(query)
+        url = config.build_url(query, brd_json=self.brd_json)
 
         payload = {
             "zone": self.zone,
@@ -211,6 +303,11 @@ class BrightDataTester:
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
             return explicit_query
+
+        engine_queries = self.ENGINE_SAMPLE_QUERIES.get(engine)
+        if engine_queries:
+            return random.choice(engine_queries)
+
         return random.choice(self.KEYWORD_POOL)
 
     def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -247,7 +344,6 @@ class BrightDataTester:
 
     def _calculate_statistics(self, engine: str, total_requests: int, concurrency: int, duration: float, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         successes = [r for r in results if r.get("success")]
-        response_times_all = [r.get("response_time") for r in results if r.get("response_time") is not None]
         response_times_success = [r.get("response_time") for r in successes if r.get("response_time") is not None]
 
         success_count = len(successes)
@@ -269,9 +365,9 @@ class BrightDataTester:
             "成功率(%)": success_rate,
             "请求速率(req/s)": round(total_requests / duration, 3) if duration > 0 else 0,
             "成功平均响应时间(s)": avg_response_time,
-            "P50延迟(s)": percentile(response_times_all, 0.5),
-            "P75延迟(s)": percentile(response_times_all, 0.75),
-            "P90延迟(s)": percentile(response_times_all, 0.9),
+            "P50延迟(s)": percentile(response_times_success, 0.5),
+            "P75延迟(s)": percentile(response_times_success, 0.75),
+            "P90延迟(s)": percentile(response_times_success, 0.9),
             "并发完成时间(s)": duration,
             "成功平均响应大小(KB)": round(
                 sum(r.get("response_size", 0) for r in successes) / len(successes), 3
@@ -382,6 +478,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-details", action="store_true", help="保存每个请求的详细 CSV 记录")
     parser.add_argument("-o", "--output", default="brightdata_summary_statistics.csv", help="汇总统计输出文件名")
     parser.add_argument("--list-engines", action="store_true", help="列出所有支持的引擎")
+    parser.add_argument(
+        "--brd-json",
+        type=int,
+        choices=[0, 1],
+        default=1,
+        help="是否在 URL 中附加 brd_json 参数 (默认 1；设置为 0 时不追加)",
+    )
 
     return parser.parse_args()
 
@@ -406,6 +509,7 @@ def main() -> None:
         zone=args.zone,
         response_format=args.format,
         save_details=args.save_details,
+        brd_json=args.brd_json if args.brd_json != 0 else None,
     )
 
     _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
