@@ -100,6 +100,16 @@ class BrightDataTester:
         ),
     }
 
+    ENGINE_DEFAULT_QUERIES: Dict[str, Any] = {
+        "search": None,  # falls back to KEYWORD_POOL
+        "maps": "coffee near me",
+        "trends": "ai news",
+        "reviews": "best sushi in nyc",
+        "lens": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+        "hotels": "paris hotel",
+        "flights": "SFO to JFK",
+    }
+
     KEYWORD_POOL = [
             "pizza", "coffee", "restaurant", "weather", "news",
             "hotel", "flight", "car", "phone", "laptop",
@@ -259,6 +269,9 @@ class BrightDataTester:
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
             return explicit_query
+        default_query = self.ENGINE_DEFAULT_QUERIES.get(engine)
+        if default_query:
+            return default_query
         return random.choice(self.KEYWORD_POOL)
 
     def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
