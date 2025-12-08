@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qs
 
 import requests
 
@@ -34,13 +34,32 @@ class EngineConfig:
     extra_params: Dict[str, Any] = None
 
     def build_url(self, query: Any, brd_json: Optional[int] = 1) -> str:
+        """
+        Build a properly formatted URL for the engine according to Bright Data specifications.
+        
+        This method ensures:
+        - No trailing ampersands (&) in the URL
+        - Proper handling of base URLs with or without existing query parameters
+        - Correct parameter encoding and concatenation
+        """
         params: Dict[str, Any] = {}
+        
+        # Parse the base URL to extract any existing query parameters
+        parsed = urlparse(self.base_url)
+        existing_params = parse_qs(parsed.query)
+        
+        # Flatten existing params (parse_qs returns lists)
+        for key, values in existing_params.items():
+            if values:
+                params[key] = values[0]
 
+        # Add the main query parameter
         if isinstance(query, dict):
             params.update(query)
         else:
             params[self.required_param] = query
 
+        # Add extra parameters (without overwriting existing ones)
         if self.extra_params:
             for key, value in self.extra_params.items():
                 params.setdefault(key, value)
@@ -49,9 +68,13 @@ class EngineConfig:
         if brd_json is not None:
             params["brd_json"] = brd_json
 
+        # Encode parameters, filtering out None values
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
-        connector = "?" if "?" not in self.base_url else "&"
-        return f"{self.base_url}{connector}{encoded}" if encoded else self.base_url
+        
+        # Reconstruct URL with clean base (no query string or trailing ?) and new parameters
+        clean_base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        
+        return f"{clean_base}?{encoded}" if encoded else clean_base
 
 
 class BrightDataTester:
