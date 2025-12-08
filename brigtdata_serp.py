@@ -44,6 +44,9 @@ class EngineConfig:
         if self.extra_params:
             params.update(self.extra_params)
 
+        # Ensure Bright Data returns JSON by default, per request URL contract
+        params.setdefault("brd_json", 1)
+
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
         connector = "?" if "?" not in self.base_url else "&"
         return f"{self.base_url}{connector}{encoded}" if encoded else self.base_url
