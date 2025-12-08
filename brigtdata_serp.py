@@ -247,7 +247,6 @@ class BrightDataTester:
 
     def _calculate_statistics(self, engine: str, total_requests: int, concurrency: int, duration: float, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         successes = [r for r in results if r.get("success")]
-        response_times_all = [r.get("response_time") for r in results if r.get("response_time") is not None]
         response_times_success = [r.get("response_time") for r in successes if r.get("response_time") is not None]
 
         success_count = len(successes)
@@ -269,9 +268,9 @@ class BrightDataTester:
             "成功率(%)": success_rate,
             "请求速率(req/s)": round(total_requests / duration, 3) if duration > 0 else 0,
             "成功平均响应时间(s)": avg_response_time,
-            "P50延迟(s)": percentile(response_times_all, 0.5),
-            "P75延迟(s)": percentile(response_times_all, 0.75),
-            "P90延迟(s)": percentile(response_times_all, 0.9),
+            "P50延迟(s)": percentile(response_times_success, 0.5),
+            "P75延迟(s)": percentile(response_times_success, 0.75),
+            "P90延迟(s)": percentile(response_times_success, 0.9),
             "并发完成时间(s)": duration,
             "成功平均响应大小(KB)": round(
                 sum(r.get("response_size", 0) for r in successes) / len(successes), 3
