@@ -119,10 +119,11 @@ class BrightDataTester:
             required_param="q",
             query_in_path=True,
         ),
-        # Google Trends keyword popularity. Minimal parameters for trend data.
+        # Google Trends keyword popularity. Requires brd_trends parameter for widget data.
         "trends": EngineConfig(
             name="trends",
             base_url="https://trends.google.com/trends/explore",
+            extra_params={"brd_trends": "timeseries,geo_map"},
         ),
         # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
         "reviews": EngineConfig(
