@@ -136,10 +136,10 @@ class BrightDataTester:
             {"q": "berlin hotel", "checkin": "2025-10-01", "checkout": "2025-10-05", "adults": 2},
         ],
         "flights": [
-            "SFO to JFK",
-            "LAX to NRT",
-            "PEK to PVG",
-            "CDG to LHR",
+            {"q": "SFO to JFK", "src": "searchbox"},
+            {"q": "LAX to NRT", "src": "searchbox"},
+            {"q": "PEK to PVG", "src": "searchbox"},
+            {"q": "CDG to LHR", "src": "searchbox"},
             {"q": "BOS to MIA", "src": "searchbox"},
         ],
     }
