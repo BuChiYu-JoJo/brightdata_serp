@@ -38,22 +38,22 @@ class EngineConfig:
     def build_url(self, query: Any, brd_json: Optional[int] = 1) -> str:
         """
         Build a properly formatted URL for the engine according to Bright Data specifications.
-        
+
         This method ensures:
         - No trailing ampersands (&) in the URL
         - Proper handling of base URLs with or without existing query parameters
         - Correct parameter encoding and concatenation
         - Support for query-in-path format (e.g., maps)
-        
+
         Note: If base_url contains duplicate parameter names, only the first value is preserved.
         URL fragments (parts after #) are not preserved as they are not used in SERP APIs.
         """
         params: Dict[str, Any] = {}
-        
+
         # Parse the base URL to extract any existing query parameters
         parsed = urlparse(self.base_url)
         existing_params = parse_qs(parsed.query)
-        
+
         # Flatten existing params (parse_qs returns lists; only first value is preserved)
         for key, values in existing_params.items():
             if values:
@@ -93,15 +93,15 @@ class EngineConfig:
 
         # Encode parameters, filtering out None values
         encoded = urlencode({k: v for k, v in params.items() if v is not None})
-        
+
         # Reconstruct URL with clean base (without query string, fragment, or trailing ?)
         clean_base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-        
+
         # Add path suffix if needed (e.g., for maps: /search/hotels/)
         if path_suffix:
             # Ensure no double slashes by removing trailing slash from base
             clean_base = clean_base.rstrip('/') + '/' + path_suffix.lstrip('/') + '/'
-        
+
         return f"{clean_base}?{encoded}" if encoded else clean_base
 
 
@@ -155,13 +155,19 @@ class BrightDataTester:
             "coffee",
             "restaurant",
             "hotel",
-            "gym"
+            "gym",
+            "theater",
+            "museums",
+            "transit",
+            "pharmacy",
         ],
         "trends": [
             {"q": "ai news", "geo": "US", "date": "now 7-d"},
             {"q": "bitcoin", "geo": "GB", "date": "today 12-m"},
             {"q": "nba", "geo": "US", "date": "now 1-d"},
             {"q": "旅游", "geo": "CN", "date": "now 1-d"},
+            {"q": "iphone"},
+            {"q": "switch"},
         ],
         "reviews": [
             "best sushi in nyc",
@@ -205,35 +211,35 @@ class BrightDataTester:
     }
 
     KEYWORD_POOL = [
-            "pizza", "coffee", "restaurant", "weather", "news",
-            "hotel", "flight", "car", "phone", "laptop",
-            "book", "music", "movie", "game", "sport",
-            "health", "fitness", "recipe", "travel", "shopping",
-            "weather tomorrow", "nearby restaurants", "best cafes",
-            "smartwatch", "headphones", "tablet", "camera",
-            "electric car", "used cars", "car rental",
-            "cheap flights", "flight status", "airport",
-            "luxury hotel", "hostel", "airbnb",
-            "stock market", "bitcoin", "currency exchange",
-            "technology", "ai news", "space exploration",
-            "basketball", "football", "tennis",
-            "concert", "festival", "museum",
-            "shopping mall", "discounts", "coupons",
-            "recipes easy", "vegan recipes", "healthy meals",
-            "pharmacy", "clinic near me", "dentist",
-            "fitness gym", "workout plan", "yoga",
-            "mobile games", "pc games", "game reviews",
-            "movies 2025", "tv shows", "cartoon",
-            "books best seller", "novels", "ebooks"
+        "pizza", "coffee", "restaurant", "weather", "news",
+        "hotel", "flight", "car", "phone", "laptop",
+        "book", "music", "movie", "game", "sport",
+        "health", "fitness", "recipe", "travel", "shopping",
+        "weather tomorrow", "nearby restaurants", "best cafes",
+        "smartwatch", "headphones", "tablet", "camera",
+        "electric car", "used cars", "car rental",
+        "cheap flights", "flight status", "airport",
+        "luxury hotel", "hostel", "airbnb",
+        "stock market", "bitcoin", "currency exchange",
+        "technology", "ai news", "space exploration",
+        "basketball", "football", "tennis",
+        "concert", "festival", "museum",
+        "shopping mall", "discounts", "coupons",
+        "recipes easy", "vegan recipes", "healthy meals",
+        "pharmacy", "clinic near me", "dentist",
+        "fitness gym", "workout plan", "yoga",
+        "mobile games", "pc games", "game reviews",
+        "movies 2025", "tv shows", "cartoon",
+        "books best seller", "novels", "ebooks"
     ]
 
     def __init__(
-        self,
-        api_token: str,
-        zone: str,
-        response_format: str = "raw",
-        save_details: bool = False,
-        brd_json: Optional[int] = 1,
+            self,
+            api_token: str,
+            zone: str,
+            response_format: str = "raw",
+            save_details: bool = False,
+            brd_json: Optional[int] = 1,
     ):
         self.api_token = api_token
         self.zone = zone
@@ -296,7 +302,7 @@ class BrightDataTester:
             return result
 
     def _evaluate_response(
-        self, response: requests.Response, parsed_json: Optional[Dict[str, Any]]
+            self, response: requests.Response, parsed_json: Optional[Dict[str, Any]]
     ) -> Tuple[bool, str]:
         if response.status_code != 200:
             return False, f"HTTP {response.status_code}"
@@ -370,7 +376,8 @@ class BrightDataTester:
 
         return random.choice(self.KEYWORD_POOL)
 
-    def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
+        List[Dict[str, Any]], Dict[str, Any]]:
         queries = [self._get_query(engine, explicit_query) for _ in range(num_requests)]
 
         results: List[Dict[str, Any]] = []
@@ -389,7 +396,8 @@ class BrightDataTester:
 
         return results, stats
 
-    def run_all_engines_test(self, engines: Iterable[str], num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def run_all_engines_test(self, engines: Iterable[str], num_requests: int, concurrency: int,
+                             explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         all_results: List[Dict[str, Any]] = []
         all_stats: List[Dict[str, Any]] = []
 
@@ -402,13 +410,15 @@ class BrightDataTester:
 
         return all_results, all_stats
 
-    def _calculate_statistics(self, engine: str, total_requests: int, concurrency: int, duration: float, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _calculate_statistics(self, engine: str, total_requests: int, concurrency: int, duration: float,
+                              results: List[Dict[str, Any]]) -> Dict[str, Any]:
         successes = [r for r in results if r.get("success")]
         response_times_success = [r.get("response_time") for r in successes if r.get("response_time") is not None]
 
         success_count = len(successes)
         success_rate = round((success_count / total_requests) * 100, 2) if total_requests else 0
-        avg_response_time = round(sum(response_times_success) / len(response_times_success), 3) if response_times_success else 0
+        avg_response_time = round(sum(response_times_success) / len(response_times_success),
+                                  3) if response_times_success else 0
 
         def percentile(values: List[float], pct: float) -> float:
             if not values:
