@@ -64,7 +64,8 @@ class BrightDataTester:
         # Google Maps place/POI lookups. Accepts free-text queries such as "coffee near me".
         "maps": EngineConfig(
             name="maps",
-            base_url="https://www.google.com/maps/search/",
+            base_url="https://www.google.com/maps",
+            required_param="q",
             extra_params={"hl": "en", "gl": "us"},
         ),
         # Google Trends keyword popularity. Bright Data proxies the Trends web UI so q=keyword
@@ -72,7 +73,11 @@ class BrightDataTester:
         "trends": EngineConfig(
             name="trends",
             base_url="https://trends.google.com/trends/explore",
-            extra_params={"geo": "US", "hl": "en"},
+            extra_params={
+                "geo": "us",
+                "hl": "en",
+                "brd_trends": "timeseries,geo_map",
+            },
         ),
         # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
         "reviews": EngineConfig(
