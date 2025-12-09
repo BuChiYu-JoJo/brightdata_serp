@@ -2,10 +2,13 @@
 
 一个用于测试 Bright Data SERP API 性能的 Python 工具，支持多种搜索引擎（Google、Bing、Yandex、DuckDuckGo 等）的并发测试和性能分析。
 
+**新版本特性：使用 asyncio 和 aiohttp 实现高性能异步并发请求。**
+
 ## 功能特性
 
 - ✅ 支持 10 种搜索引擎的测试（7种Google引擎 + 3种其他搜索引擎）
-- ✅ 并发请求测试，可自定义并发数
+- ✅ **异步并发请求**，使用 asyncio 和 aiohttp 提供更高性能
+- ✅ 可自定义并发数
 - ✅ 详细的性能统计（成功率、响应时间、延迟百分位数）
 - ✅ 支持 JSON 和 HTML 两种响应格式
 - ✅ 自动生成 CSV 统计报告
@@ -30,8 +33,10 @@
 ## 安装依赖
 
 ```bash
-pip install requests
+pip install aiohttp
 ```
+
+**注意**：新版本使用 `aiohttp` 替代了 `requests`，以提供更好的异步并发性能。
 
 ## 使用方法
 
@@ -351,11 +356,22 @@ python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE --all-engines -n 20 -c 5 --s
 
 ### 并发执行
 
-使用 `ThreadPoolExecutor` 实现并发请求：
+**异步并发实现（新版本）：**
 
-- 可配置的工作线程数
-- 自动收集和聚合结果
-- 准确的性能计数
+使用 `asyncio` 和 `aiohttp` 实现高性能异步并发：
+
+- **异步 I/O**：使用 `aiohttp.ClientSession` 进行非阻塞 HTTP 请求
+- **协程并发**：使用 `asyncio.gather()` 并发执行多个请求任务
+- **连接池管理**：通过 `TCPConnector` 控制并发连接数
+- **性能优势**：相比线程池，异步 I/O 在高并发场景下内存占用更少，性能更高
+- **可配置并发数**：通过 `-c` 参数控制同时发起的请求数量
+- **自动结果聚合**：所有异步请求完成后自动收集结果
+
+技术栈：
+- `asyncio`：Python 标准库异步编程框架
+- `aiohttp`：高性能异步 HTTP 客户端库
+- `asyncio.gather()`：并发执行多个协程
+- `TCPConnector`：管理 TCP 连接池
 
 ### 统计计算
 
