@@ -252,6 +252,9 @@ class BrightDataTester:
         "books best seller", "novels", "ebooks"
     ]
 
+    # HTTP request timeout in seconds
+    REQUEST_TIMEOUT = 30
+
     def __init__(
             self,
             api_token: str,
@@ -301,7 +304,7 @@ class BrightDataTester:
 
         start_time = time.perf_counter()
         try:
-            timeout = aiohttp.ClientTimeout(total=30)
+            timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT)
             async with session.post(self.API_URL, json=payload, headers=headers, timeout=timeout) as response:
                 duration = round(time.perf_counter() - start_time, 3)
                 
@@ -406,22 +409,17 @@ class BrightDataTester:
 
         return random.choice(self.KEYWORD_POOL)
 
-    async def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
+    async def run_engine_test(self, session: aiohttp.ClientSession, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
         List[Dict[str, Any]], Dict[str, Any]]:
         queries = [self._get_query(engine, explicit_query) for _ in range(num_requests)]
 
         results: List[Dict[str, Any]] = []
         start = time.perf_counter()
 
-        # Create a connector with limit on concurrent connections
-        connector = aiohttp.TCPConnector(limit=concurrency, limit_per_host=concurrency)
-        timeout = aiohttp.ClientTimeout(total=30)
-        
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            # Create tasks for all requests
-            tasks = [self.make_request(session, engine, q) for q in queries]
-            # Execute all tasks concurrently
-            results = await asyncio.gather(*tasks)
+        # Create tasks for all requests
+        tasks = [self.make_request(session, engine, q) for q in queries]
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
 
         duration = round(time.perf_counter() - start, 3)
         stats = self._calculate_statistics(engine, num_requests, concurrency, duration, results)
@@ -436,12 +434,17 @@ class BrightDataTester:
         all_results: List[Dict[str, Any]] = []
         all_stats: List[Dict[str, Any]] = []
 
-        for engine in engines:
-            print(f"\n=== 开始测试引擎: {engine} ===")
-            results, stats = await self.run_engine_test(engine, num_requests, concurrency, explicit_query)
-            all_results.extend(results)
-            all_stats.append(stats)
-            print(f"=== 引擎 {engine} 测试完成 ===")
+        # Create a single session for all engine tests to reuse connections
+        connector = aiohttp.TCPConnector(limit=concurrency, limit_per_host=concurrency)
+        timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT)
+        
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            for engine in engines:
+                print(f"\n=== 开始测试引擎: {engine} ===")
+                results, stats = await self.run_engine_test(session, engine, num_requests, concurrency, explicit_query)
+                all_results.extend(results)
+                all_stats.append(stats)
+                print(f"=== 引擎 {engine} 测试完成 ===")
 
         return all_results, all_stats
 
