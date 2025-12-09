@@ -283,7 +283,7 @@ class BrightDataTester:
         }
         return payload
 
-    async def make_request(self, session: aiohttp.ClientSession, engine: str, query: Any) -> Dict[str, Any]:
+    async def make_request(self, engine: str, query: Any) -> Dict[str, Any]:
         result = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "engine": engine,
@@ -305,21 +305,23 @@ class BrightDataTester:
         start_time = time.perf_counter()
         try:
             timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT)
-            async with session.post(self.API_URL, json=payload, headers=headers, timeout=timeout) as response:
-                duration = round(time.perf_counter() - start_time, 3)
-                
-                result["status_code"] = response.status
-                content = await response.read()
-                result["response_time"] = duration
-                result["response_size"] = round(len(content) / 1024, 3)
-                
-                parsed_json = await self._try_parse_json(response, content)
-                result["response_excerpt"] = self._extract_excerpt(parsed_json, content)
+            # Create a new session for each request to measure true response time including connection overhead
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(self.API_URL, json=payload, headers=headers) as response:
+                    duration = round(time.perf_counter() - start_time, 3)
+                    
+                    result["status_code"] = response.status
+                    content = await response.read()
+                    result["response_time"] = duration
+                    result["response_size"] = round(len(content) / 1024, 3)
+                    
+                    parsed_json = await self._try_parse_json(response, content)
+                    result["response_excerpt"] = self._extract_excerpt(parsed_json, content)
 
-                success, error_message = self._evaluate_response(response.status, content, parsed_json)
-                result["success"] = success
-                result["error"] = error_message
-                return result
+                    success, error_message = self._evaluate_response(response.status, content, parsed_json)
+                    result["success"] = success
+                    result["error"] = error_message
+                    return result
         except asyncio.TimeoutError:
             result["response_time"] = round(time.perf_counter() - start_time, 3)
             result["success"] = False
@@ -409,15 +411,15 @@ class BrightDataTester:
 
         return random.choice(self.KEYWORD_POOL)
 
-    async def run_engine_test(self, session: aiohttp.ClientSession, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
+    async def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
         List[Dict[str, Any]], Dict[str, Any]]:
         queries = [self._get_query(engine, explicit_query) for _ in range(num_requests)]
 
         results: List[Dict[str, Any]] = []
         start = time.perf_counter()
 
-        # Create tasks for all requests
-        tasks = [self.make_request(session, engine, q) for q in queries]
+        # Create tasks for all requests (each will create its own session)
+        tasks = [self.make_request(engine, q) for q in queries]
         # Execute all tasks concurrently
         results = await asyncio.gather(*tasks)
 
@@ -434,17 +436,12 @@ class BrightDataTester:
         all_results: List[Dict[str, Any]] = []
         all_stats: List[Dict[str, Any]] = []
 
-        # Create a single session for all engine tests to reuse connections
-        connector = aiohttp.TCPConnector(limit=concurrency, limit_per_host=concurrency)
-        timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT)
-        
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            for engine in engines:
-                print(f"\n=== 开始测试引擎: {engine} ===")
-                results, stats = await self.run_engine_test(session, engine, num_requests, concurrency, explicit_query)
-                all_results.extend(results)
-                all_stats.append(stats)
-                print(f"=== 引擎 {engine} 测试完成 ===")
+        for engine in engines:
+            print(f"\n=== 开始测试引擎: {engine} ===")
+            results, stats = await self.run_engine_test(engine, num_requests, concurrency, explicit_query)
+            all_results.extend(results)
+            all_stats.append(stats)
+            print(f"=== 引擎 {engine} 测试完成 ===")
 
         return all_results, all_stats
 
