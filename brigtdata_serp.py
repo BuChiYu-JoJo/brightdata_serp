@@ -421,7 +421,7 @@ class BrightDataTester:
         # Use a semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(concurrency)
         
-        async def bounded_request(query):
+        async def bounded_request(query: Any) -> Dict[str, Any]:
             async with semaphore:
                 return await self.make_request(engine, query)
         
