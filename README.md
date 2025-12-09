@@ -362,6 +362,7 @@ python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE --all-engines -n 20 -c 5 --s
 
 - **异步 I/O**：使用 `aiohttp.ClientSession` 进行非阻塞 HTTP 请求
 - **协程并发**：使用 `asyncio.gather()` 并发执行多个请求任务
+- **并发控制**：使用 `asyncio.Semaphore` 精确控制同时执行的请求数量
 - **独立连接测量**：每个请求创建新的 session，测量真实响应时间（包括连接建立）
 - **性能优势**：相比线程池，异步 I/O 在高并发场景下内存占用更少，性能更高
 - **可配置并发数**：通过 `-c` 参数控制同时发起的请求数量
@@ -371,6 +372,13 @@ python brigtdata_serp.py -t YOUR_TOKEN -z YOUR_ZONE --all-engines -n 20 -c 5 --s
 - `asyncio`：Python 标准库异步编程框架
 - `aiohttp`：高性能异步 HTTP 客户端库
 - `asyncio.gather()`：并发执行多个协程
+- `asyncio.Semaphore`：限制并发请求数量
+
+**并发控制说明**：
+- 使用信号量（Semaphore）确保严格遵守并发限制
+- 例如：`-c 10` 确保最多同时执行 10 个请求
+- 超过限制的请求会等待，直到有空闲槽位
+- 保证测试结果的可控性和可重现性
 
 **响应时间测量说明**：
 - 每个请求使用独立的 HTTP session

@@ -418,9 +418,16 @@ class BrightDataTester:
         results: List[Dict[str, Any]] = []
         start = time.perf_counter()
 
-        # Create tasks for all requests (each will create its own session)
-        tasks = [self.make_request(engine, q) for q in queries]
-        # Execute all tasks concurrently
+        # Use a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(concurrency)
+        
+        async def bounded_request(query):
+            async with semaphore:
+                return await self.make_request(engine, query)
+        
+        # Create tasks with concurrency control
+        tasks = [bounded_request(q) for q in queries]
+        # Execute tasks with proper concurrency limit
         results = await asyncio.gather(*tasks)
 
         duration = round(time.perf_counter() - start, 3)
