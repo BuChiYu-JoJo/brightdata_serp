@@ -7,10 +7,12 @@ SERP proxy across multiple Google-facing engines (Search, Maps, Trends). It
 constructs per-engine request payloads, executes concurrent runs, and records
 latency, success rate, and response size statistics. Both raw (HTML) and JSON
 responses are supported.
+
+This version uses asyncio and aiohttp for high-performance async concurrent requests.
 """
 
 import argparse
-import concurrent.futures
+import asyncio
 import csv
 import json
 import math
@@ -21,7 +23,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlencode, urlparse, parse_qs, quote
 
-import requests
+import aiohttp
 
 
 @dataclass
@@ -119,10 +121,11 @@ class BrightDataTester:
             required_param="q",
             query_in_path=True,
         ),
-        # Google Trends keyword popularity. Minimal parameters for trend data.
+        # Google Trends keyword popularity. Requires brd_trends parameter for widget data.
         "trends": EngineConfig(
             name="trends",
             base_url="https://trends.google.com/trends/explore",
+            extra_params={"brd_trends": "timeseries,geo_map"},
         ),
         # Google local reviews surface (Local Pack). tbm=lcl switches the vertical to reviews.
         "reviews": EngineConfig(
@@ -146,6 +149,22 @@ class BrightDataTester:
         "flights": EngineConfig(
             name="flights",
             base_url="https://www.google.com/travel/flights",
+        ),
+        # Bing search engine. Uses q parameter for queries.
+        "bing": EngineConfig(
+            name="bing",
+            base_url="https://www.bing.com/search",
+        ),
+        # Yandex search engine. Uses text parameter for queries.
+        "yandex": EngineConfig(
+            name="yandex",
+            base_url="https://www.yandex.com/search/",
+            required_param="text",
+        ),
+        # DuckDuckGo search engine. Uses q parameter for queries.
+        "duckduckgo": EngineConfig(
+            name="duckduckgo",
+            base_url="https://duckduckgo.com/",
         ),
     }
 
@@ -233,6 +252,9 @@ class BrightDataTester:
         "books best seller", "novels", "ebooks"
     ]
 
+    # HTTP request timeout in seconds
+    REQUEST_TIMEOUT = 30
+
     def __init__(
             self,
             api_token: str,
@@ -261,7 +283,7 @@ class BrightDataTester:
         }
         return payload
 
-    def make_request(self, engine: str, query: Any) -> Dict[str, Any]:
+    async def make_request(self, engine: str, query: Any) -> Dict[str, Any]:
         result = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "engine": engine,
@@ -282,18 +304,28 @@ class BrightDataTester:
 
         start_time = time.perf_counter()
         try:
-            response = requests.post(self.API_URL, json=payload, headers=headers, timeout=30)
-            duration = round(time.perf_counter() - start_time, 3)
+            timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT)
+            # Create a new session for each request to measure true response time including connection overhead
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(self.API_URL, json=payload, headers=headers) as response:
+                    duration = round(time.perf_counter() - start_time, 3)
+                    
+                    result["status_code"] = response.status
+                    content = await response.read()
+                    result["response_time"] = duration
+                    result["response_size"] = round(len(content) / 1024, 3)
+                    
+                    parsed_json = await self._try_parse_json(response, content)
+                    result["response_excerpt"] = self._extract_excerpt(parsed_json, content)
 
-            result["status_code"] = response.status_code
-            result["response_time"] = duration
-            result["response_size"] = round(len(response.content) / 1024, 3)
-            parsed_json = self._try_parse_json(response)
-            result["response_excerpt"] = self._extract_excerpt(parsed_json, response)
-
-            success, error_message = self._evaluate_response(response, parsed_json)
-            result["success"] = success
-            result["error"] = error_message
+                    success, error_message = self._evaluate_response(response.status, content, parsed_json)
+                    result["success"] = success
+                    result["error"] = error_message
+                    return result
+        except asyncio.TimeoutError:
+            result["response_time"] = round(time.perf_counter() - start_time, 3)
+            result["success"] = False
+            result["error"] = "Request timeout"
             return result
         except Exception as exc:
             result["response_time"] = round(time.perf_counter() - start_time, 3)
@@ -302,12 +334,12 @@ class BrightDataTester:
             return result
 
     def _evaluate_response(
-            self, response: requests.Response, parsed_json: Optional[Dict[str, Any]]
+            self, status_code: int, content: bytes, parsed_json: Optional[Dict[str, Any]]
     ) -> Tuple[bool, str]:
-        if response.status_code != 200:
-            return False, f"HTTP {response.status_code}"
+        if status_code != 200:
+            return False, f"HTTP {status_code}"
 
-        if not response.content:
+        if not content:
             return False, "Empty response"
 
         if parsed_json is not None:
@@ -322,16 +354,18 @@ class BrightDataTester:
 
         return True, ""
 
-    def _try_parse_json(self, response: requests.Response) -> Optional[Dict[str, Any]]:
+    async def _try_parse_json(self, response: aiohttp.ClientResponse, content: bytes) -> Optional[Dict[str, Any]]:
         # When the caller requested JSON, attempt to parse even if the content type is missing
         # or incorrect, to better surface Bright Data payload errors/excerpts.
+        text = content.decode('utf-8', errors='ignore')
+        
         if self.response_format != "json":
             content_type = response.headers.get("Content-Type", "").lower()
-            if "json" not in content_type and not response.text.strip().startswith("{"):
+            if "json" not in content_type and not text.strip().startswith("{"):
                 return None
 
         try:
-            parsed = response.json()
+            parsed = json.loads(text)
             return parsed if isinstance(parsed, dict) else None
         except Exception:
             return None
@@ -351,7 +385,7 @@ class BrightDataTester:
             return f"{payload.get('error')}{error_code}{detail_suffix}"
         return ""
 
-    def _extract_excerpt(self, parsed_json: Optional[Dict[str, Any]], response: requests.Response) -> str:
+    def _extract_excerpt(self, parsed_json: Optional[Dict[str, Any]], content: bytes) -> str:
         if parsed_json:
             # For JSON responses, prioritize a JSON snippet so the CSV clearly shows
             # the structured payload instead of embedded HTML.
@@ -364,7 +398,8 @@ class BrightDataTester:
             if "error" in parsed_json:
                 return json.dumps(parsed_json, ensure_ascii=False)[:1000]
 
-        return response.text[:1000]
+        text = content.decode('utf-8', errors='ignore')
+        return text[:1000]
 
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
@@ -376,17 +411,24 @@ class BrightDataTester:
 
         return random.choice(self.KEYWORD_POOL)
 
-    def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
+    async def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
         List[Dict[str, Any]], Dict[str, Any]]:
         queries = [self._get_query(engine, explicit_query) for _ in range(num_requests)]
 
         results: List[Dict[str, Any]] = []
         start = time.perf_counter()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-            future_to_query = {executor.submit(self.make_request, engine, q): q for q in queries}
-            for future in concurrent.futures.as_completed(future_to_query):
-                results.append(future.result())
+        # Use a semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(concurrency)
+        
+        async def bounded_request(query: Any) -> Dict[str, Any]:
+            async with semaphore:
+                return await self.make_request(engine, query)
+        
+        # Create tasks with concurrency control
+        tasks = [bounded_request(q) for q in queries]
+        # Execute tasks with proper concurrency limit
+        results = await asyncio.gather(*tasks)
 
         duration = round(time.perf_counter() - start, 3)
         stats = self._calculate_statistics(engine, num_requests, concurrency, duration, results)
@@ -396,14 +438,14 @@ class BrightDataTester:
 
         return results, stats
 
-    def run_all_engines_test(self, engines: Iterable[str], num_requests: int, concurrency: int,
+    async def run_all_engines_test(self, engines: Iterable[str], num_requests: int, concurrency: int,
                              explicit_query: Optional[str]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         all_results: List[Dict[str, Any]] = []
         all_stats: List[Dict[str, Any]] = []
 
         for engine in engines:
             print(f"\n=== 开始测试引擎: {engine} ===")
-            results, stats = self.run_engine_test(engine, num_requests, concurrency, explicit_query)
+            results, stats = await self.run_engine_test(engine, num_requests, concurrency, explicit_query)
             all_results.extend(results)
             all_stats.append(stats)
             print(f"=== 引擎 {engine} 测试完成 ===")
@@ -522,22 +564,22 @@ class BrightDataTester:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Bright Data SERP 性能测试脚本",
+        description="Bright Data SERP 性能测试脚本 (异步并发版)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
   # 测试单个引擎 (默认随机关键词)
-  python brightdata_tester.py -t YOUR_TOKEN -z serp_api1 -e search -n 10 -c 5
+  python brigtdata_serp.py -t YOUR_TOKEN -z serp_api1 -e search -n 10 -c 5
 
   # 指定查询关键词并测试多个引擎
-  python brightdata_tester.py -t YOUR_TOKEN -z serp_api1 -e search maps trends -n 5 -c 3 -q pizza
+  python brigtdata_serp.py -t YOUR_TOKEN -z serp_api1 -e search maps trends -n 5 -c 3 -q pizza
 
   # 使用 JSON 响应格式并保存详细记录
-  python brightdata_tester.py -t YOUR_TOKEN -z serp_api1 -e search --format json --save-details
+  python brigtdata_serp.py -t YOUR_TOKEN -z serp_api1 -e search --format json --save-details
         """,
     )
 
-    parser.add_argument("-t", "--api-token", required=True, help="Bright Data API Token")
+    parser.add_argument("-t", "--api-token", help="Bright Data API Token")
     parser.add_argument("-z", "--zone", default="serp_api1", help="Bright Data zone 名称")
     parser.add_argument("-e", "--engines", nargs="+", help="要测试的引擎列表")
     parser.add_argument("--all-engines", action="store_true", help="测试所有支持的引擎")
@@ -559,13 +601,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+async def async_main() -> None:
     args = parse_args()
 
     if args.list_engines:
         print("支持的引擎:")
         for i, engine in enumerate(BrightDataTester.SUPPORTED_ENGINES.keys(), 1):
             print(f"  {i:2d}. {engine}")
+        return
+
+    if not args.api_token:
+        print("错误: 需要提供 API Token (使用 -t/--api-token)")
         return
 
     if not args.all_engines and not args.engines:
@@ -582,8 +628,12 @@ def main() -> None:
         brd_json=args.brd_json if args.brd_json != 0 else None,
     )
 
-    _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
+    _, statistics = await tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
     tester.save_summary_statistics(statistics, args.output)
+
+
+def main() -> None:
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":
