@@ -16,8 +16,10 @@ import json
 import math
 import random
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlencode, urlparse, parse_qs, quote
 
@@ -245,12 +247,16 @@ class BrightDataTester:
             response_format: str = "raw",
             save_details: bool = False,
             brd_json: Optional[int] = 1,
+            response_save_dir: Optional[str] = None,
     ):
         self.api_token = api_token
         self.zone = zone
         self.response_format = response_format
         self.save_details = save_details
         self.brd_json = brd_json
+        self.response_save_dir = Path(response_save_dir) if response_save_dir else None
+        if self.response_save_dir:
+            self.response_save_dir.mkdir(parents=True, exist_ok=True)
 
     def _build_payload(self, engine: str, query: Any) -> Dict[str, Any]:
         if engine not in self.SUPPORTED_ENGINES:
@@ -295,6 +301,7 @@ class BrightDataTester:
             result["response_size"] = round(len(response.content) / 1024, 3)
             parsed_json = self._try_parse_json(response)
             result["response_excerpt"] = self._extract_excerpt(parsed_json, response)
+            self._save_response_content(engine, response, parsed_json)
 
             success, error_message = self._evaluate_response(response, parsed_json)
             result["success"] = success
@@ -370,6 +377,32 @@ class BrightDataTester:
                 return json.dumps(parsed_json, ensure_ascii=False)[:1000]
 
         return response.text[:1000]
+
+    def _save_response_content(
+            self,
+            engine: str,
+            response: requests.Response,
+            parsed_json: Optional[Dict[str, Any]],
+    ) -> None:
+        if not self.response_save_dir:
+            return
+
+        content_type = response.headers.get("Content-Type", "").lower()
+        if self.response_format == "json" or "json" in content_type or parsed_json is not None:
+            extension = "json"
+        else:
+            extension = "html"
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        unique_suffix = uuid.uuid4().hex[:8]
+        filename = f"{engine}_{timestamp}_{unique_suffix}.{extension}"
+        path = self.response_save_dir / filename
+
+        while path.exists():
+            unique_suffix = uuid.uuid4().hex[:8]
+            path = self.response_save_dir / f"{engine}_{timestamp}_{unique_suffix}.{extension}"
+
+        path.write_bytes(response.content)
 
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
@@ -551,6 +584,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-q", "--query", help="指定查询关键词 (默认随机)")
     parser.add_argument("--format", choices=["raw", "json"], default="raw", help="Bright Data 响应格式")
     parser.add_argument("--save-details", action="store_true", help="保存每个请求的详细 CSV 记录")
+    parser.add_argument(
+        "--save-responses-dir",
+        help="保存每个响应内容到指定文件夹 (自动去重命名)",
+    )
     parser.add_argument("-o", "--output", default="brightdata_summary_statistics.csv", help="汇总统计输出文件名")
     parser.add_argument("--list-engines", action="store_true", help="列出所有支持的引擎")
     parser.add_argument(
@@ -585,6 +622,7 @@ def main() -> None:
         response_format=args.format,
         save_details=args.save_details,
         brd_json=args.brd_json if args.brd_json != 0 else None,
+        response_save_dir=args.save_responses_dir,
     )
 
     _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
