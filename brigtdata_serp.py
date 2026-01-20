@@ -327,9 +327,21 @@ class BrightDataTester:
             return False, "Empty response"
 
         if self.data_format == "screenshot":
+            if parsed_json is not None:
+                if isinstance(parsed_json, dict):
+                    error_message = self._extract_error_from_payload(parsed_json)
+                    if error_message:
+                        return False, error_message
+
+                    proxy_status = parsed_json.get("status_code")
+                    if proxy_status and proxy_status != 200:
+                        return False, f"Proxy status {proxy_status}"
+
+                return True, ""
+
             if self._is_image_response(response):
                 return True, ""
-            return False, "Invalid image response"
+            return False, "Unexpected screenshot response"
 
         if parsed_json is not None:
             if isinstance(parsed_json, dict):
@@ -344,8 +356,6 @@ class BrightDataTester:
         return True, ""
 
     def _try_parse_json(self, response: requests.Response) -> Optional[Dict[str, Any]]:
-        if self.data_format == "screenshot":
-            return None
         # When the caller requested JSON, attempt to parse even if the content type is missing
         # or incorrect, to better surface Bright Data payload errors/excerpts.
         if self.response_format != "json":
@@ -375,10 +385,6 @@ class BrightDataTester:
         return "" 
 
     def _extract_excerpt(self, parsed_json: Optional[Dict[str, Any]], response: requests.Response) -> str:
-        if self.data_format == "screenshot":
-            content_type = response.headers.get("Content-Type", "").strip()
-            suffix = f" ({content_type})" if content_type else ""
-            return f"[binary image response]{suffix}"
         if parsed_json:
             # For JSON responses, prioritize a JSON snippet so the CSV clearly shows
             # the structured payload instead of embedded HTML.
@@ -390,6 +396,14 @@ class BrightDataTester:
 
             if "error" in parsed_json:
                 return json.dumps(parsed_json, ensure_ascii=False)[:1000]
+
+            if self.data_format == "screenshot":
+                return json.dumps(parsed_json, ensure_ascii=False)[:1000]
+
+        if self.data_format == "screenshot":
+            content_type = response.headers.get("Content-Type", "").strip()
+            suffix = f" ({content_type})" if content_type else ""
+            return f"[binary image response]{suffix}"
 
         return response.text[:1000]
 
