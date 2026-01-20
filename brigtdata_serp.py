@@ -248,6 +248,7 @@ class BrightDataTester:
             save_details: bool = False,
             brd_json: Optional[int] = 1,
             response_save_dir: Optional[str] = None,
+            data_format: Optional[str] = None,
     ):
         self.api_token = api_token
         self.zone = zone
@@ -255,6 +256,7 @@ class BrightDataTester:
         self.save_details = save_details
         self.brd_json = brd_json
         self.response_save_dir = Path(response_save_dir) if response_save_dir else None
+        self.data_format = data_format
         if self.response_save_dir:
             self.response_save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -270,6 +272,8 @@ class BrightDataTester:
             "url": url,
             "format": self.response_format,
         }
+        if self.data_format:
+            payload["data_format"] = self.data_format
         return payload
 
     def make_request(self, engine: str, query: Any) -> Dict[str, Any]:
@@ -322,6 +326,11 @@ class BrightDataTester:
         if not response.content:
             return False, "Empty response"
 
+        if self.data_format == "screenshot":
+            if self._is_image_response(response):
+                return True, ""
+            return False, "Invalid image response"
+
         if parsed_json is not None:
             if isinstance(parsed_json, dict):
                 error_message = self._extract_error_from_payload(parsed_json)
@@ -335,6 +344,8 @@ class BrightDataTester:
         return True, ""
 
     def _try_parse_json(self, response: requests.Response) -> Optional[Dict[str, Any]]:
+        if self.data_format == "screenshot":
+            return None
         # When the caller requested JSON, attempt to parse even if the content type is missing
         # or incorrect, to better surface Bright Data payload errors/excerpts.
         if self.response_format != "json":
@@ -361,9 +372,13 @@ class BrightDataTester:
             detail_suffix = f": {'; '.join(detail_messages)}" if detail_messages else ""
             error_code = f" ({payload.get('error_code')})" if payload.get("error_code") else ""
             return f"{payload.get('error')}{error_code}{detail_suffix}"
-        return ""
+        return "" 
 
     def _extract_excerpt(self, parsed_json: Optional[Dict[str, Any]], response: requests.Response) -> str:
+        if self.data_format == "screenshot":
+            content_type = response.headers.get("Content-Type", "").strip()
+            suffix = f" ({content_type})" if content_type else ""
+            return f"[binary image response]{suffix}"
         if parsed_json:
             # For JSON responses, prioritize a JSON snippet so the CSV clearly shows
             # the structured payload instead of embedded HTML.
@@ -388,7 +403,9 @@ class BrightDataTester:
             return
 
         content_type = response.headers.get("Content-Type", "").lower()
-        if self.response_format == "json" or "json" in content_type or parsed_json is not None:
+        if self.data_format == "screenshot":
+            extension = self._image_extension_from_content_type(content_type)
+        elif self.response_format == "json" or "json" in content_type or parsed_json is not None:
             extension = "json"
         else:
             extension = "html"
@@ -403,6 +420,29 @@ class BrightDataTester:
             path = self.response_save_dir / f"{engine}_{timestamp}_{unique_suffix}.{extension}"
 
         path.write_bytes(response.content)
+
+    @staticmethod
+    def _image_extension_from_content_type(content_type: str) -> str:
+        content_type = content_type.split(";")[0].strip()
+        if content_type == "image/png":
+            return "png"
+        if content_type in {"image/jpeg", "image/jpg"}:
+            return "jpg"
+        if content_type == "image/webp":
+            return "webp"
+        if content_type == "image/gif":
+            return "gif"
+        if content_type == "image/bmp":
+            return "bmp"
+        return "bin"
+
+    @staticmethod
+    def _is_image_response(response: requests.Response) -> bool:
+        content_type = response.headers.get("Content-Type", "").lower()
+        if content_type.startswith("image/"):
+            return True
+        signature = response.content[:8]
+        return signature.startswith(b"\x89PNG") or signature.startswith(b"\xff\xd8\xff") or signature.startswith(b"GIF8")
 
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
@@ -583,6 +623,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-c", "--concurrency", type=int, default=3, help="并发数")
     parser.add_argument("-q", "--query", help="指定查询关键词 (默认随机)")
     parser.add_argument("--format", choices=["raw", "json"], default="raw", help="Bright Data 响应格式")
+    parser.add_argument(
+        "--data-format",
+        choices=["screenshot"],
+        default=None,
+        help="附加 data_format 参数以请求特定数据格式（如 screenshot）",
+    )
     parser.add_argument("--save-details", action="store_true", help="保存每个请求的详细 CSV 记录")
     parser.add_argument(
         "--save-responses-dir",
@@ -623,6 +669,7 @@ def main() -> None:
         save_details=args.save_details,
         brd_json=args.brd_json if args.brd_json != 0 else None,
         response_save_dir=args.save_responses_dir,
+        data_format=args.data_format,
     )
 
     _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
