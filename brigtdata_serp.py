@@ -297,7 +297,7 @@ class BrightDataTester:
 
         start_time = time.perf_counter()
         try:
-            response = requests.post(self.API_URL, json=payload, headers=headers, timeout=90)
+            response = requests.post(self.API_URL, json=payload, headers=headers, timeout=120)
             duration = round(time.perf_counter() - start_time, 3)
 
             result["status_code"] = response.status_code
@@ -401,9 +401,18 @@ class BrightDataTester:
                 return json.dumps(parsed_json, ensure_ascii=False)[:1000]
 
         if self.data_format == "screenshot":
-            content_type = response.headers.get("Content-Type", "").strip()
-            suffix = f" ({content_type})" if content_type else ""
-            return f"[binary image response]{suffix}"
+            # 1️⃣ 空 body：截图失败 / 灰态
+            if not response.content:
+                return "[empty screenshot response]"
+
+            # 2️⃣ 真正的图片二进制（PNG / JPEG / WebP 等）
+            if self._is_image_response(response):
+                content_type = response.headers.get("Content-Type", "").strip()
+                suffix = f" ({content_type})" if content_type else ""
+                return f"[binary image response]{suffix}"
+
+            # 3️⃣ 兜底：非图片但非空（极少见）
+            return "[non-image screenshot payload]"
 
         return response.text[:1000]
 
