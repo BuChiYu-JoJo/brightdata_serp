@@ -249,6 +249,8 @@ class BrightDataTester:
             brd_json: Optional[int] = 1,
             response_save_dir: Optional[str] = None,
             data_format: Optional[str] = None,
+            hl: Optional[str] = None,
+            gl: Optional[str] = None,
     ):
         self.api_token = api_token
         self.zone = zone
@@ -257,6 +259,8 @@ class BrightDataTester:
         self.brd_json = brd_json
         self.response_save_dir = Path(response_save_dir) if response_save_dir else None
         self.data_format = data_format
+        self.hl = hl
+        self.gl = gl
         if self.response_save_dir:
             self.response_save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -317,9 +321,17 @@ class BrightDataTester:
             result["error"] = f"Request error: {exc}"
             return result
 
-    def _evaluate_response(
-            self, response: requests.Response, parsed_json: Optional[Dict[str, Any]]
-    ) -> Tuple[bool, str]:
+    def _evaluate_response(self, response: requests.Response, parsed_json: Optional[Any]) -> Tuple[bool, str]:
+        if self.data_format == "parsed_light":
+            if not isinstance(parsed_json, dict):
+                return False, "Invalid parsed_light payload"
+            if parsed_json.get("error"):
+                return False, self._extract_error_from_payload(parsed_json)
+            organic = parsed_json.get("organic")
+            if not isinstance(organic, list) or not organic:
+                return False, "Missing or empty organic results"
+            return True, ""
+
         if response.status_code != 200:
             return False, f"HTTP {response.status_code}"
 
@@ -355,7 +367,13 @@ class BrightDataTester:
 
         return True, ""
 
-    def _try_parse_json(self, response: requests.Response) -> Optional[Dict[str, Any]]:
+    def _try_parse_json(self, response: requests.Response) -> Optional[Any]:
+        if self.data_format == "parsed_light":
+            try:
+                return response.json()
+            except Exception:
+                return None
+
         # When the caller requested JSON, attempt to parse even if the content type is missing
         # or incorrect, to better surface Bright Data payload errors/excerpts.
         if self.response_format != "json":
@@ -384,7 +402,16 @@ class BrightDataTester:
             return f"{payload.get('error')}{error_code}{detail_suffix}"
         return "" 
 
-    def _extract_excerpt(self, parsed_json: Optional[Dict[str, Any]], response: requests.Response) -> str:
+    def _extract_excerpt(self, parsed_json: Optional[Any], response: requests.Response) -> str:
+        if self.data_format == "parsed_light":
+            if isinstance(parsed_json, dict):
+                excerpt_payload = parsed_json.get("organic")
+                if excerpt_payload is None:
+                    excerpt_payload = parsed_json
+                return json.dumps(excerpt_payload, ensure_ascii=False)[:1000]
+            if parsed_json is not None:
+                return json.dumps(parsed_json, ensure_ascii=False)[:1000]
+
         if parsed_json:
             # For JSON responses, prioritize a JSON snippet so the CSV clearly shows
             # the structured payload instead of embedded HTML.
@@ -420,7 +447,7 @@ class BrightDataTester:
             self,
             engine: str,
             response: requests.Response,
-            parsed_json: Optional[Dict[str, Any]],
+            parsed_json: Optional[Any],
     ) -> None:
         if not self.response_save_dir:
             return
@@ -469,13 +496,28 @@ class BrightDataTester:
 
     def _get_query(self, engine: str, explicit_query: Optional[str]) -> Any:
         if explicit_query:
-            return explicit_query
+            return self._apply_search_locale(engine, explicit_query)
 
         engine_queries = self.ENGINE_SAMPLE_QUERIES.get(engine)
         if engine_queries:
-            return random.choice(engine_queries)
+            return self._apply_search_locale(engine, random.choice(engine_queries))
 
-        return random.choice(self.KEYWORD_POOL)
+        return self._apply_search_locale(engine, random.choice(self.KEYWORD_POOL))
+
+    def _apply_search_locale(self, engine: str, query: Any) -> Any:
+        if engine != "search" or (not self.hl and not self.gl):
+            return query
+
+        if isinstance(query, dict):
+            localized_query = dict(query)
+        else:
+            localized_query = {"q": query}
+
+        if self.hl:
+            localized_query["hl"] = self.hl
+        if self.gl:
+            localized_query["gl"] = self.gl
+        return localized_query
 
     def run_engine_test(self, engine: str, num_requests: int, concurrency: int, explicit_query: Optional[str]) -> Tuple[
         List[Dict[str, Any]], Dict[str, Any]]:
@@ -648,10 +690,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", choices=["raw", "json"], default="raw", help="Bright Data 响应格式")
     parser.add_argument(
         "--data-format",
-        choices=["screenshot"],
+        choices=["screenshot", "parsed_light"],
         default=None,
-        help="附加 data_format 参数以请求特定数据格式（如 screenshot）",
+        help="附加 data_format 参数以请求特定数据格式（如 screenshot, parsed_light）",
     )
+    parser.add_argument("--hl", help="Google Search 语言参数 (如 en, zh-CN)")
+    parser.add_argument("--gl", help="Google Search 国家/地区参数 (如 us, cn)")
     parser.add_argument("--save-details", action="store_true", help="保存每个请求的详细 CSV 记录")
     parser.add_argument(
         "--save-responses-dir",
@@ -693,6 +737,8 @@ def main() -> None:
         brd_json=args.brd_json if args.brd_json != 0 else None,
         response_save_dir=args.save_responses_dir,
         data_format=args.data_format,
+        hl=args.hl,
+        gl=args.gl,
     )
 
     _, statistics = tester.run_all_engines_test(engines, args.num_requests, args.concurrency, args.query)
